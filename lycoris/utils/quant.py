@@ -1,5 +1,7 @@
 from functools import cache
 
+import torch
+
 SUPPORT_QUANT = False
 try:
     from bitsandbytes.nn import LinearNF4, Linear8bitLt, LinearFP4
@@ -69,6 +71,14 @@ QuantLinears = (
     QConv2dOpt,
     QLayerNormOpt,
 )
+
+
+def is_quantized_weight(module) -> bool:
+    """Tensor-subclass quantization (torchao): the module stays a plain
+    Linear/Conv, only weight.data is a subclass like NVFP4Tensor.
+    Weight-space math on such tensors raises NotImplementedError."""
+    weight = getattr(module, "weight", None)
+    return weight is not None and type(weight.data) is not torch.Tensor
 
 
 @cache

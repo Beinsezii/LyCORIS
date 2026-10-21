@@ -6,7 +6,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.utils.parametrize as parametrize
 
-from ..utils.quant import QuantLinears, log_bypass, log_fp8_bypass, log_suspect
+from ..utils.quant import (
+    QuantLinears,
+    is_quantized_weight,
+    log_bypass,
+    log_fp8_bypass,
+    log_suspect,
+)
 
 try:
     from peft.tuners.tuners_utils import BaseTunerLayer
@@ -234,9 +240,8 @@ class LycorisBaseModule(ModuleCustomSD):
                 log_bypass()
             self.is_quant = True
             bypass_mode = True
-        if (
-            is_linear_like_module(org_module)
-            and org_module.__class__.__name__ != "Linear"
+        if is_linear_like_module(org_module) and (
+            org_module.__class__.__name__ != "Linear" or is_quantized_weight(org_module)
         ):
             if bypass_mode is None:
                 log_suspect()
@@ -333,7 +338,12 @@ class LycorisBaseModule(ModuleCustomSD):
     def _current_weight(self):
         if is_weight_only_fp8_linear(self.org_module[0]):
             return dequantize_weight_only_fp8(self.org_module[0])
-        return self.org_module[0].weight.detach()
+        weight = self.org_module[0].weight.detach()
+        # torchao-style tensor subclasses expose dequantize()
+        dequantize = getattr(weight, "dequantize", None)
+        if callable(dequantize):
+            return dequantize()
+        return weight
 
     def _current_bias(self):
         bias = self.org_module[0].bias
@@ -397,9 +407,11 @@ class LycorisBaseModule(ModuleCustomSD):
     def merge_to(self, multiplier=1.0, *, precise: bool = False):
         if self.not_supported:
             return
-        if is_weight_only_fp8_linear(self.org_module[0]):
+        if is_weight_only_fp8_linear(self.org_module[0]) or is_quantized_weight(
+            self.org_module[0]
+        ):
             raise RuntimeError(
-                "Merging LyCORIS modules into weight-only FP8 Linear is not supported."
+                "Merging LyCORIS modules into quantized Linear is not supported."
             )
 
         ctx = self._prepare_merge_context(precise)
@@ -420,9 +432,11 @@ class LycorisBaseModule(ModuleCustomSD):
     def onfly_merge(self, multiplier=1.0):
         if self.not_supported:
             return
-        if is_weight_only_fp8_linear(self.org_module[0]):
+        if is_weight_only_fp8_linear(self.org_module[0]) or is_quantized_weight(
+            self.org_module[0]
+        ):
             raise RuntimeError(
-                "Merging LyCORIS modules into weight-only FP8 Linear is not supported."
+                "Merging LyCORIS modules into quantized Linear is not supported."
             )
         self_device = next(self.parameters()).device
         self_dtype = next(self.parameters()).dtype

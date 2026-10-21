@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ..utils.quant import is_quantized_weight
 from .base import LycorisBaseModule, is_weight_only_fp8_linear
 from ..functional import factorization
 from ..functional.general import weight_decompose
@@ -580,8 +581,12 @@ class LokrModule(LycorisBaseModule):
             if torch.rand(1) < self.module_dropout:
                 return self.org_forward(x, *args, **kwargs)
 
-        fp8_weight_decompose = self.wd and is_weight_only_fp8_linear(self.org_module[0])
-        if self.bypass_mode and not fp8_weight_decompose:
+        # weight_decompose needs the dense base, rebuild via dequantized weight
+        quant_weight_decompose = self.wd and (
+            is_weight_only_fp8_linear(self.org_module[0])
+            or is_quantized_weight(self.org_module[0])
+        )
+        if self.bypass_mode and not quant_weight_decompose:
             return self.bypass_forward(x, self.multiplier)
         return self._rebuild_forward(x, *args, **kwargs)
 
