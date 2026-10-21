@@ -74,11 +74,30 @@ QuantLinears = (
 
 
 def is_quantized_weight(module) -> bool:
-    """Tensor-subclass quantization (torchao): the module stays a plain
-    Linear/Conv, only weight.data is a subclass like NVFP4Tensor.
+    """Tensor-subclass quantization (torchao, bnb, ...): the module stays a
+    plain Linear/Conv, only weight.data is a subclass like NVFP4Tensor.
     Weight-space math on such tensors raises NotImplementedError."""
     weight = getattr(module, "weight", None)
     return weight is not None and type(weight.data) is not torch.Tensor
+
+
+try:
+    from torchao.utils import TorchAOBaseTensor
+except ImportError:
+    TorchAOBaseTensor = None
+
+
+def has_torchao_quantized_weight(module) -> bool:
+    """Whether the weight is a torchao tensor with a real dequantize().
+    torchao monkeypatches Tensor.dequantize, so duck-typing is unsafe:
+    on a plain tensor it upcasts to fp32, on bnb Params4bit it ignores
+    quant_state and returns garbage."""
+    weight = getattr(module, "weight", None)
+    return (
+        TorchAOBaseTensor is not None
+        and weight is not None
+        and isinstance(weight.data, TorchAOBaseTensor)
+    )
 
 
 @cache

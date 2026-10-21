@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from .base import LycorisBaseModule
 from ..functional.general import weight_decompose
 from ..functional.locon import bypass_forward_diff as bypass_diff, diff_weight
+from ..utils.quant import has_torchao_quantized_weight
 from ..logging import logger
 
 
@@ -114,7 +115,7 @@ class LoConModule(LycorisBaseModule):
         self.wd = weight_decompose
         self.wd_on_out = wd_on_out
         if self.wd:
-            org_weight = org_module.weight.cpu().clone().float()
+            org_weight = self._current_weight().cpu().clone().float()
             self.dora_norm_dims = org_weight.dim() - 1
             if self.wd_on_out:
                 self.dora_scale = nn.Parameter(
@@ -327,7 +328,10 @@ class LoConModule(LycorisBaseModule):
             if torch.rand(1) < self.module_dropout:
                 return self.org_forward(x, *args, **kwargs)
 
-        if self.bypass_mode:
+        # weight_decompose needs the dense base, rebuild via dequantized weight
+        if self.bypass_mode and not (
+            self.wd and has_torchao_quantized_weight(self.org_module[0])
+        ):
             return self.bypass_forward(x, scale=self.multiplier)
 
         base = self.org_forward(x, *args, **kwargs)
@@ -343,6 +347,7 @@ class LoConModule(LycorisBaseModule):
         else:
             new_weight = base_weight + diff_weight * self.multiplier
 
-        delta_weight = new_weight - base_weight
+        # dequantized bases come back fp32, keep the delta in x's dtype
+        delta_weight = (new_weight - base_weight).to(dtype=x.dtype)
         delta = self.op(x, delta_weight, None, **self.kw_dict)
         return base + delta

@@ -8,6 +8,7 @@ import torch.nn.utils.parametrize as parametrize
 
 from ..utils.quant import (
     QuantLinears,
+    has_torchao_quantized_weight,
     is_quantized_weight,
     log_bypass,
     log_fp8_bypass,
@@ -339,10 +340,8 @@ class LycorisBaseModule(ModuleCustomSD):
         if is_weight_only_fp8_linear(self.org_module[0]):
             return dequantize_weight_only_fp8(self.org_module[0])
         weight = self.org_module[0].weight.detach()
-        # torchao-style tensor subclasses expose dequantize()
-        dequantize = getattr(weight, "dequantize", None)
-        if callable(dequantize):
-            return dequantize()
+        if has_torchao_quantized_weight(self.org_module[0]):
+            return weight.dequantize()
         return weight
 
     def _current_bias(self):
