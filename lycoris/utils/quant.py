@@ -1,4 +1,5 @@
 from functools import cache
+from typing import Any
 
 import torch
 
@@ -78,12 +79,18 @@ QuantLinears = (
 )
 
 
+def get_qdata(module) -> Any | None:
+    """Quantized weight data of module. Type(T) is NOT torch.Tensor"""
+    weight_data = getattr(getattr(module, "weight", None), "data", None)
+    if type(weight_data) is not torch.Tensor:
+        return weight_data
+
+
 def is_quantized_weight(module) -> bool:
     """Tensor-subclass quantization (torchao, bnb, ...): the module stays a
     plain Linear/Conv, only weight.data is a subclass like NVFP4Tensor.
     Weight-space math on such tensors raises NotImplementedError."""
-    weight = getattr(module, "weight", None)
-    return weight is not None and type(weight.data) is not torch.Tensor
+    return get_qdata(module) is not None
 
 
 def has_torchao_quantized_weight(module) -> bool:
@@ -91,11 +98,8 @@ def has_torchao_quantized_weight(module) -> bool:
     torchao monkeypatches Tensor.dequantize, so duck-typing is unsafe:
     on a plain tensor it upcasts to fp32, on bnb Params4bit it ignores
     quant_state and returns garbage."""
-    weight = getattr(module, "weight", None)
-    return (
-        TorchAOBaseTensor is not None
-        and weight is not None
-        and isinstance(weight.data, TorchAOBaseTensor)
+    return TorchAOBaseTensor is not None and isinstance(
+        get_qdata(module), TorchAOBaseTensor
     )
 
 

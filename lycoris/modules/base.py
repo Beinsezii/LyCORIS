@@ -242,6 +242,7 @@ class LycorisBaseModule(ModuleCustomSD):
             self.is_quant = True
             bypass_mode = True
         if is_linear_like_module(org_module) and (
+            # AO spoofs this
             org_module.__class__.__name__ != "Linear" or is_quantized_weight(org_module)
         ):
             if bypass_mode is None:
