@@ -58,6 +58,11 @@ except Exception:
         pass
 
 
+try:
+    from torchao.utils import TorchAOBaseTensor
+except ImportError:
+    TorchAOBaseTensor = None
+
 from ..logging import logger
 
 QuantLinears = (
@@ -79,12 +84,6 @@ def is_quantized_weight(module) -> bool:
     Weight-space math on such tensors raises NotImplementedError."""
     weight = getattr(module, "weight", None)
     return weight is not None and type(weight.data) is not torch.Tensor
-
-
-try:
-    from torchao.utils import TorchAOBaseTensor
-except ImportError:
-    TorchAOBaseTensor = None
 
 
 def has_torchao_quantized_weight(module) -> bool:
